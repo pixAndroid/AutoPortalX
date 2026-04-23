@@ -1,0 +1,315 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum UserRole {
+  SUPER_ADMIN
+  ADMIN
+  MEMBER
+}
+
+enum MemberRole {
+  OWNER
+  ADMIN
+  MEMBER
+  VIEWER
+}
+
+enum ScheduleType {
+  ONCE
+  RECURRING
+}
+
+enum JobStatus {
+  PENDING
+  RUNNING
+  COMPLETED
+  FAILED
+  CANCELLED
+}
+
+enum StepStatus {
+  PENDING
+  RUNNING
+  COMPLETED
+  FAILED
+  SKIPPED
+}
+
+enum TriggerSource {
+  MANUAL
+  SCHEDULE
+  API
+  WEBHOOK
+}
+
+enum NotificationType {
+  JOB_COMPLETED
+  JOB_FAILED
+  TEAM_INVITE
+  SYSTEM
+}
+
+enum WorkerStatus {
+  ONLINE
+  OFFLINE
+  BUSY
+}
+
+model User {
+  id           String    @id @default(cuid())
+  email        String    @unique
+  name         String
+  passwordHash String
+  role         UserRole  @default(MEMBER)
+  companyId    String?
+  isActive     Boolean   @default(true)
+  createdAt    DateTime  @default(now())
+  updatedAt    DateTime  @updatedAt
+
+  company       Company?      @relation(fields: [companyId], references: [id])
+  memberships   Membership[]
+  notifications Notification[]
+  apiKeys       ApiKey[]
+  auditLogs     AuditLog[]
+  supportNotes  SupportNote[]
+}
+
+model Company {
+  id                  String   @id @default(cuid())
+  name                String
+  logo                String?
+  timezone            String   @default("UTC")
+  notificationEmail   String?
+  dataRetentionDays   Int      @default(90)
+  isActive            Boolean  @default(true)
+  createdAt           DateTime @default(now())
+  updatedAt           DateTime @updatedAt
+
+  users          User[]
+  memberships    Membership[]
+  portalAccounts PortalAccount[]
+  workflows      Workflow[]
+  schedules      Schedule[]
+  jobRuns        JobRun[]
+  fileAssets     FileAsset[]
+  notifications  Notification[]
+  apiKeys        ApiKey[]
+  auditLogs      AuditLog[]
+  supportNotes   SupportNote[]
+}
+
+model Membership {
+  id          String     @id @default(cuid())
+  userId      String
+  companyId   String
+  role        MemberRole @default(MEMBER)
+  permissions Json       @default("[]")
+  isActive    Boolean    @default(true)
+  createdAt   DateTime   @default(now())
+
+  user    User    @relation(fields: [userId], references: [id])
+  company Company @relation(fields: [companyId], references: [id])
+
+  @@unique([userId, companyId])
+}
+
+model Role {
+  id          String   @id @default(cuid())
+  name        String
+  companyId   String
+  permissions Json     @default("[]")
+  createdAt   DateTime @default(now())
+
+  company Company @relation(fields: [companyId], references: [id])
+}
+
+model PortalAccount {
+  id                String   @id @default(cuid())
+  companyId         String
+  portalName        String
+  loginUrl          String
+  username          String
+  encryptedPassword String
+  notes             String?
+  otpType           String?
+  isActive          Boolean  @default(true)
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+
+  company Company @relation(fields: [companyId], references: [id])
+}
+
+model Workflow {
+  id          String   @id @default(cuid())
+  companyId   String
+  name        String
+  description String?
+  steps       Json     @default("[]")
+  isActive    Boolean  @default(true)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  company       Company         @relation(fields: [companyId], references: [id])
+  workflowSteps WorkflowStep[]
+  versions      WorkflowVersion[]
+  schedules     Schedule[]
+  jobRuns       JobRun[]
+}
+
+model WorkflowStep {
+  id         String   @id @default(cuid())
+  workflowId String
+  stepType   String
+  config     Json     @default("{}")
+  order      Int
+  isActive   Boolean  @default(true)
+
+  workflow Workflow @relation(fields: [workflowId], references: [id])
+}
+
+model WorkflowVersion {
+  id         String   @id @default(cuid())
+  workflowId String
+  version    Int
+  steps      Json
+  createdAt  DateTime @default(now())
+  createdBy  String
+
+  workflow Workflow @relation(fields: [workflowId], references: [id])
+}
+
+model Schedule {
+  id           String       @id @default(cuid())
+  workflowId   String
+  companyId    String
+  scheduleType ScheduleType @default(RECURRING)
+  cronExpr     String?
+  timezone     String       @default("UTC")
+  nextRun      DateTime?
+  isActive     Boolean      @default(true)
+  createdAt    DateTime     @default(now())
+  updatedAt    DateTime     @updatedAt
+
+  workflow Workflow @relation(fields: [workflowId], references: [id])
+  company  Company  @relation(fields: [companyId], references: [id])
+}
+
+model JobRun {
+  id            String        @id @default(cuid())
+  workflowId    String
+  companyId     String
+  status        JobStatus     @default(PENDING)
+  triggerSource TriggerSource @default(MANUAL)
+  startedAt     DateTime?
+  completedAt   DateTime?
+  duration      Int?
+  errorReason   String?
+  logs          Json          @default("[]")
+  createdAt     DateTime      @default(now())
+
+  workflow   Workflow      @relation(fields: [workflowId], references: [id])
+  company    Company       @relation(fields: [companyId], references: [id])
+  stepLogs   JobStepLog[]
+  fileAssets FileAsset[]
+}
+
+model JobStepLog {
+  id          String     @id @default(cuid())
+  jobRunId    String
+  stepIndex   Int
+  stepType    String
+  status      StepStatus @default(PENDING)
+  message     String?
+  screenshot  String?
+  startedAt   DateTime?
+  completedAt DateTime?
+
+  jobRun JobRun @relation(fields: [jobRunId], references: [id])
+}
+
+model FileAsset {
+  id           String   @id @default(cuid())
+  companyId    String
+  jobRunId     String?
+  filename     String
+  originalName String
+  mimeType     String
+  size         Int
+  storageKey   String
+  downloadUrl  String?
+  createdAt    DateTime @default(now())
+
+  company Company  @relation(fields: [companyId], references: [id])
+  jobRun  JobRun?  @relation(fields: [jobRunId], references: [id])
+}
+
+model Notification {
+  id        String           @id @default(cuid())
+  userId    String
+  companyId String
+  type      NotificationType @default(SYSTEM)
+  title     String
+  message   String
+  isRead    Boolean          @default(false)
+  createdAt DateTime         @default(now())
+
+  user    User    @relation(fields: [userId], references: [id])
+  company Company @relation(fields: [companyId], references: [id])
+}
+
+model ApiKey {
+  id        String    @id @default(cuid())
+  companyId String
+  userId    String
+  name      String
+  keyHash   String
+  lastUsed  DateTime?
+  isActive  Boolean   @default(true)
+  createdAt DateTime  @default(now())
+
+  company Company @relation(fields: [companyId], references: [id])
+  user    User    @relation(fields: [userId], references: [id])
+}
+
+model AuditLog {
+  id         String   @id @default(cuid())
+  companyId  String
+  userId     String
+  action     String
+  resource   String
+  resourceId String?
+  details    Json     @default("{}")
+  ip         String?
+  createdAt  DateTime @default(now())
+
+  company Company @relation(fields: [companyId], references: [id])
+  user    User    @relation(fields: [userId], references: [id])
+}
+
+model WorkerNode {
+  id            String       @id @default(cuid())
+  hostname      String
+  status        WorkerStatus @default(OFFLINE)
+  lastHeartbeat DateTime
+  activeJobs    Int          @default(0)
+  metadata      Json         @default("{}")
+  createdAt     DateTime     @default(now())
+  updatedAt     DateTime     @updatedAt
+}
+
+model SupportNote {
+  id        String   @id @default(cuid())
+  companyId String
+  authorId  String
+  content   String
+  createdAt DateTime @default(now())
+
+  company Company @relation(fields: [companyId], references: [id])
+  author  User    @relation(fields: [authorId], references: [id])
+}
