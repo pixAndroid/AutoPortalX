@@ -11,14 +11,14 @@
   "dependencies": {
     "@autoflowx/common": "workspace:*",
     "@autoflowx/db": "workspace:*",
-    "next": "14.2.3",
+    "next": "15.5.15",
     "react": "^18.3.0",
     "react-dom": "^18.3.0",
     "bullmq": "^5.7.0",
     "ioredis": "^5.3.2",
     "jsonwebtoken": "^9.0.2",
     "bcryptjs": "^2.4.3",
-    "nodemailer": "^6.9.13",
+    "nodemailer": "^7.0.11",
     "zod": "^3.22.0",
     "uuid": "^9.0.1"
   },
